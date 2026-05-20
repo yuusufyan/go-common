@@ -1,6 +1,6 @@
 # Go-Common Library
 
-Library standar untuk pengembangan Microservices di project Go Fiber. Library ini menyediakan standarisasi untuk Respon API, Messaging (RabbitMQ), Middleware, Health Check, Audit Trail, dan utilitas database lainnya yang mendukung framework **Fiber** dan **Echo**.
+Library standar untuk pengembangan Microservices di project Go Fiber. Library ini menyediakan standarisasi untuk Respon API, Messaging (RabbitMQ), Middleware, Health Check, Audit Trail, dan utilitas database lainnya yang mendukung framework **Fiber**.
 
 ---
 
@@ -54,12 +54,6 @@ return response.RespondWithPagination(c, "Success", &response.Pagination{
     Page: 1,
     Limit: 10,
 })
-```
-
-### Implementasi Echo
-```go
-return response.EchoSuccess(c, 200, "Success", data)
-return response.EchoRespondWithPagination(c, "Success", pagination)
 ```
 
 ---
