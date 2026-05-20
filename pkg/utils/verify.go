@@ -3,7 +3,7 @@ package utils
 import (
 	"errors"
 
-	"	github.com/golang-jwt/jwt/v5"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func VerifyToken(tokenStr, secret, tokenType string) (jwt.MapClaims, error) {
