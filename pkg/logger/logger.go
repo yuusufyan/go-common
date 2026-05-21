@@ -14,9 +14,18 @@ const (
 	RequestIDKey contextKey = "request_id"
 )
 
-// Logger defines the interface for logging (optional, if you want to swap loggers later)
+// Logger defines the interface for logging
 type Logger interface {
+	logrus.FieldLogger
 	WithCtx(ctx context.Context) *logrus.Entry
+}
+
+type appLogger struct {
+	*logrus.Logger
+}
+
+func (l *appLogger) WithCtx(ctx context.Context) *logrus.Entry {
+	return WithCtx(ctx, l.Logger)
 }
 
 // WithCtx extracts trace and request information from context and returns a log entry
@@ -43,13 +52,13 @@ func WithCtx(ctx context.Context, log *logrus.Logger) *logrus.Entry {
 }
 
 // New initializes a new logrus logger with standardized formatting
-func New(isProd bool) *logrus.Logger {
+func New(isProd bool) Logger {
 	log := logrus.New()
 
 	if isProd {
 		// In production, use JSON for centralized logging (ELK, Loki, etc.)
 		log.SetFormatter(&logrus.JSONFormatter{
-			TimestampFormat: "2006-01-02T15:04:05.000Z07:00",
+			TimestampFormat: "2006-01-02T15:04:05.999Z07:00",
 		})
 	} else {
 		// In development, use colored text for readability
@@ -70,5 +79,5 @@ func New(isProd bool) *logrus.Logger {
 		log.SetLevel(logrus.DebugLevel)
 	}
 
-	return log
+	return &appLogger{Logger: log}
 }

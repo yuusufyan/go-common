@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/yuusufyan/go-common/pkg/logger"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -16,7 +16,7 @@ const (
 	UserContextKey ContextKey = "user"
 )
 
-func Connect(cfg *DBConfig, log *logrus.Logger, isProd bool) (*gorm.DB, error) {
+func Connect(cfg *DBConfig, log logger.Logger, isProd bool) (*gorm.DB, error) {
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Asia/Jakarta",
 		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port,

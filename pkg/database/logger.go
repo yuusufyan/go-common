@@ -12,12 +12,12 @@ import (
 
 // GormLogger is a custom GORM logger that uses logrus and is context-aware
 type GormLogger struct {
-	log           *logrus.Logger
+	log           logger.Logger
 	SlowThreshold time.Duration
 }
 
 // NewGormLogger creates a new GORM logger bridge
-func NewGormLogger(log *logrus.Logger) *GormLogger {
+func NewGormLogger(log logger.Logger) *GormLogger {
 	return &GormLogger{
 		log:           log,
 		SlowThreshold: 200 * time.Millisecond, // Default threshold for slow queries
@@ -29,15 +29,15 @@ func (l *GormLogger) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
 }
 
 func (l *GormLogger) Info(ctx context.Context, msg string, data ...interface{}) {
-	logger.WithCtx(ctx, l.log).Infof(msg, data...)
+	l.log.WithCtx(ctx).Infof(msg, data...)
 }
 
 func (l *GormLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
-	logger.WithCtx(ctx, l.log).Warnf(msg, data...)
+	l.log.WithCtx(ctx).Warnf(msg, data...)
 }
 
 func (l *GormLogger) Error(ctx context.Context, msg string, data ...interface{}) {
-	logger.WithCtx(ctx, l.log).Errorf(msg, data...)
+	l.log.WithCtx(ctx).Errorf(msg, data...)
 }
 
 func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
@@ -50,7 +50,7 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (stri
 		"sql":     sql,
 	}
 
-	entry := logger.WithCtx(ctx, l.log).WithFields(fields)
+	entry := l.log.WithCtx(ctx).WithFields(fields)
 
 	if err != nil && !errors.Is(err, gormlogger.ErrRecordNotFound) {
 		entry.Errorf("DB Error: %v", err)

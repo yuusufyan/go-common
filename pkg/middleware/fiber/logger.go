@@ -9,7 +9,7 @@ import (
 )
 
 // Logger returns a middleware that logs HTTP requests using the structured logger
-func Logger(log *logrus.Logger) fiber.Handler {
+func Logger(log logger.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start := time.Now()
 
@@ -20,7 +20,7 @@ func Logger(log *logrus.Logger) fiber.Handler {
 		latency := time.Since(start)
 
 		// Get Trace ID and Request ID from context (set by Telemetry middleware)
-		entry := logger.WithCtx(c.UserContext(), log).WithFields(logrus.Fields{
+		entry := log.WithCtx(c.UserContext()).WithFields(logrus.Fields{
 			"method":     c.Method(),
 			"path":       c.Path(),
 			"status":     c.Response().StatusCode(),

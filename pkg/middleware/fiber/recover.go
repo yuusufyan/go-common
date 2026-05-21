@@ -11,7 +11,7 @@ import (
 )
 
 // Recover returns a middleware that recovers from panics and logs them using logrus
-func Recover(log *logrus.Logger) fiber.Handler {
+func Recover(log logger.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		defer func() {
 			if r := recover(); r != nil {
@@ -22,7 +22,7 @@ func Recover(log *logrus.Logger) fiber.Handler {
 
 				stack := debug.Stack()
 
-				logger.WithCtx(c.UserContext(), log).WithFields(logrus.Fields{
+				log.WithCtx(c.UserContext()).WithFields(logrus.Fields{
 					"stack":  string(stack),
 					"method": c.Method(),
 					"path":   c.Path(),
