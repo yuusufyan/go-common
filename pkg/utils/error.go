@@ -8,15 +8,14 @@ import (
 	"github.com/yuusufyan/go-common/response"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/sirupsen/logrus"
 )
 
-func NewErrorHandler(log *logrus.Logger) fiber.ErrorHandler {
+func NewErrorHandler(log logger.Logger) fiber.ErrorHandler {
 	return func(c *fiber.Ctx, err error) error {
 		var appErr *apperror.AppError
 		if errors.As(err, &appErr) {
 			if appErr.Code >= 500 {
-				logger.WithCtx(c.UserContext(), log).WithError(err).Error("App Error")
+				log.WithCtx(c.UserContext()).WithError(err).Error("App Error")
 			}
 			return response.Error(c, appErr.Code, appErr.Message, appErr.Errors)
 		}
@@ -24,13 +23,13 @@ func NewErrorHandler(log *logrus.Logger) fiber.ErrorHandler {
 		var fiberErr *fiber.Error
 		if errors.As(err, &fiberErr) {
 			if fiberErr.Code >= 500 {
-				logger.WithCtx(c.UserContext(), log).WithError(err).Error("Fiber Error")
+				log.WithCtx(c.UserContext()).WithError(err).Error("Fiber Error")
 			}
 			return response.Error(c, fiberErr.Code, fiberErr.Message, nil)
 		}
 
 		// Log unhandled errors
-		logger.WithCtx(c.UserContext(), log).WithError(err).Error("Unhandled Error")
+		log.WithCtx(c.UserContext()).WithError(err).Error("Unhandled Error")
 		return response.Error(c, fiber.StatusInternalServerError, "Internal Server Error", nil)
 	}
 }
