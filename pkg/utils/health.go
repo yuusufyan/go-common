@@ -16,38 +16,81 @@ type HealthCheckResponse struct {
 	Checks    map[string]string `json:"checks"`
 }
 
-// NewHealthHandler creates a standardized health check handler
-func NewHealthHandler(db *gorm.DB, rdb *redis.Client) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		status := "UP"
-		checks := make(map[string]string)
+// HealthCheck is a single dependency check.
+type HealthCheck struct {
+	Name  string
+	Check func(ctx context.Context) error
+	// Critical marks the service DOWN (503) when this check fails.
+	// Non-critical failures are reported but keep the status UP.
+	Critical bool
+}
 
-		// Check Database
-		if db != nil {
+// HealthConfig configures NewHealthHandlerWithConfig.
+type HealthConfig struct {
+	Checks []HealthCheck
+	// Timeout per check (default: 2s).
+	Timeout time.Duration
+}
+
+// DBHealthCheck returns a critical check that pings the database.
+func DBHealthCheck(db *gorm.DB) HealthCheck {
+	return HealthCheck{
+		Name:     "database",
+		Critical: true,
+		Check: func(ctx context.Context) error {
 			sqlDB, err := db.DB()
 			if err != nil {
-				status = "DOWN"
-				checks["database"] = "ERROR: " + err.Error()
-			} else {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				if err := sqlDB.PingContext(ctx); err != nil {
-					status = "DOWN"
-					checks["database"] = "DOWN: " + err.Error()
-				} else {
-					checks["database"] = "UP"
-				}
+				return err
 			}
-		}
+			return sqlDB.PingContext(ctx)
+		},
+	}
+}
 
-		// Check Redis
-		if rdb != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			if err := rdb.Ping(ctx).Err(); err != nil {
-				checks["redis"] = "DOWN: " + err.Error()
+// RedisHealthCheck returns a non-critical check that pings redis.
+func RedisHealthCheck(rdb *redis.Client) HealthCheck {
+	return HealthCheck{
+		Name: "redis",
+		Check: func(ctx context.Context) error {
+			return rdb.Ping(ctx).Err()
+		},
+	}
+}
+
+// NewHealthHandler creates a standardized health check handler
+func NewHealthHandler(db *gorm.DB, rdb *redis.Client) fiber.Handler {
+	var checks []HealthCheck
+	if db != nil {
+		checks = append(checks, DBHealthCheck(db))
+	}
+	if rdb != nil {
+		checks = append(checks, RedisHealthCheck(rdb))
+	}
+	return NewHealthHandlerWithConfig(HealthConfig{Checks: checks})
+}
+
+// NewHealthHandlerWithConfig creates a health check handler running arbitrary checks.
+func NewHealthHandlerWithConfig(cfg HealthConfig) fiber.Handler {
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = 2 * time.Second
+	}
+
+	return func(c *fiber.Ctx) error {
+		status := "UP"
+		checks := make(map[string]string, len(cfg.Checks))
+
+		for _, hc := range cfg.Checks {
+			ctx, cancel := context.WithTimeout(c.UserContext(), cfg.Timeout)
+			err := hc.Check(ctx)
+			cancel()
+
+			if err != nil {
+				checks[hc.Name] = "DOWN: " + err.Error()
+				if hc.Critical {
+					status = "DOWN"
+				}
 			} else {
-				checks["redis"] = "UP"
+				checks[hc.Name] = "UP"
 			}
 		}
 

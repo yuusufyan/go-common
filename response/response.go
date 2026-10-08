@@ -104,7 +104,10 @@ func RespondWithError(c *fiber.Ctx, err error) error {
 
 // Paginate is the standard way to send paginated responses in Fiber
 func Paginate[T any](c *fiber.Ctx, message string, data []T, total int64, page, limit int) error {
-	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+	totalPages := 0
+	if limit > 0 {
+		totalPages = int(math.Ceil(float64(total) / float64(limit)))
+	}
 
 	meta := Meta{
 		Total:        total,

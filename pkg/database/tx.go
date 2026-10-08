@@ -24,7 +24,7 @@ func (m *txManager) Do(ctx context.Context, fn func(ctx context.Context) error) 
 	// For simplicity, we assume nested transactions use savepoints or just reuse the parent.
 	// GORM supports nested transactions automatically if using the same *gorm.DB instance inside a transaction.
 	// But here we might be creating a new one.
-	
+
 	// Check if tx is already in context
 	if _, ok := ctx.Value(TxKey).(*gorm.DB); ok {
 		return fn(ctx)

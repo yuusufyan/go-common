@@ -12,22 +12,34 @@ import (
 
 // ShutdownHelper manages the graceful shutdown of various resources
 type ShutdownHelper struct {
-	log     *logrus.Logger
+	log     logrus.FieldLogger
 	timeout time.Duration
 }
 
-// NewShutdownHelper creates a new helper with a default 10s timeout
-func NewShutdownHelper(log *logrus.Logger) *ShutdownHelper {
+// NewShutdownHelper creates a new helper with a default 10s timeout.
+// log accepts either a logger.Logger or a *logrus.Logger.
+func NewShutdownHelper(log logrus.FieldLogger) *ShutdownHelper {
 	return &ShutdownHelper{
 		log:     log,
 		timeout: 10 * time.Second,
 	}
 }
 
-// Wait blocks until a termination signal is received
-func (h *ShutdownHelper) Wait() {
+// WithTimeout overrides the total shutdown timeout.
+func (h *ShutdownHelper) WithTimeout(timeout time.Duration) *ShutdownHelper {
+	if timeout > 0 {
+		h.timeout = timeout
+	}
+	return h
+}
+
+// Wait blocks until a termination signal is received (default: SIGINT, SIGTERM)
+func (h *ShutdownHelper) Wait(signals ...os.Signal) {
+	if len(signals) == 0 {
+		signals = []os.Signal{syscall.SIGINT, syscall.SIGTERM}
+	}
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(quit, signals...)
 	s := <-quit
 	h.log.Infof("Shutdown signal received: %v", s)
 }

@@ -3,6 +3,7 @@ package apperror
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -54,6 +55,8 @@ func InternalServer(message string) *AppError {
 	return New(http.StatusInternalServerError, message)
 }
 
+// customMessages maps validator tags to messages. The first %s is the field name,
+// the optional second %s is the tag param (e.g. min=3).
 var customMessages = map[string]string{
 	"required": "Field %s must be filled",
 	"email":    "Invalid email address for field %s",
@@ -64,6 +67,20 @@ var customMessages = map[string]string{
 	"positive": "Field %s must be a positive number",
 	"alphanum": "Field %s must contain only alphanumeric characters",
 	"oneof":    "Invalid value for field %s",
+}
+
+// SetValidationMessage registers or overrides the message for a validator tag,
+// e.g. SetValidationMessage("required", "Field %s wajib diisi").
+// Call it during application startup.
+func SetValidationMessage(tag, message string) {
+	customMessages[tag] = message
+}
+
+// SetValidationMessages registers or overrides several tag messages at once.
+func SetValidationMessages(messages map[string]string) {
+	for tag, msg := range messages {
+		customMessages[tag] = msg
+	}
 }
 
 // TranslateValidationError translates validator.ValidationErrors to an AppError with custom messages
@@ -81,7 +98,7 @@ func TranslateValidationError(err error) *AppError {
 
 			message := customMessages[tag]
 			if message != "" {
-				if tag == "min" || tag == "max" || tag == "len" {
+				if strings.Count(message, "%s") >= 2 {
 					errorsMap[fieldName] = fmt.Sprintf(message, fieldName, e.Param())
 				} else {
 					errorsMap[fieldName] = fmt.Sprintf(message, fieldName)

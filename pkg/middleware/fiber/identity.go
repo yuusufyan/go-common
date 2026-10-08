@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/yuusufyan/go-common/response"
 )
 
 const (
@@ -15,7 +16,7 @@ const (
 	HeaderUserPermissions = "X-User-Permissions"
 )
 
-// UserIdentity represents the information passed from BFF/Identity service
+// UserIdentity represents the user information forwarded by an upstream gateway/identity service
 type UserIdentity struct {
 	ID          string   `json:"id"`
 	Email       string   `json:"email"`
@@ -23,36 +24,58 @@ type UserIdentity struct {
 	Permissions []string `json:"permissions"`
 }
 
-// Identity extracts user information from trusted headers injected by the BFF.
+// GetID implements the interface used by the database audit plugin.
+func (u *UserIdentity) GetID() string {
+	return u.ID
+}
+
+// IdentityConfig configures the header names used by the Identity middleware.
+// Empty fields fall back to the defaults (X-User-ID, X-User-Email, X-User-Role, X-User-Permissions, ",").
+type IdentityConfig struct {
+	HeaderUserID          string
+	HeaderUserEmail       string
+	HeaderUserRole        string
+	HeaderUserPermissions string
+	// Separator splits multi-value headers (roles & permissions).
+	Separator string
+}
+
+// Identity extracts user information from trusted headers injected by the upstream gateway.
 func Identity() fiber.Handler {
+	return IdentityWithConfig(IdentityConfig{})
+}
+
+// IdentityWithConfig is the configurable version of Identity.
+func IdentityWithConfig(cfg IdentityConfig) fiber.Handler {
+	if cfg.HeaderUserID == "" {
+		cfg.HeaderUserID = HeaderUserID
+	}
+	if cfg.HeaderUserEmail == "" {
+		cfg.HeaderUserEmail = HeaderUserEmail
+	}
+	if cfg.HeaderUserRole == "" {
+		cfg.HeaderUserRole = HeaderUserRole
+	}
+	if cfg.HeaderUserPermissions == "" {
+		cfg.HeaderUserPermissions = HeaderUserPermissions
+	}
+	if cfg.Separator == "" {
+		cfg.Separator = ","
+	}
+
 	return func(c *fiber.Ctx) error {
-		userID := c.Get(HeaderUserID)
-		userEmail := c.Get(HeaderUserEmail)
-		userRolesRaw := c.Get(HeaderUserRole)
-		userPermissionsRaw := c.Get(HeaderUserPermissions)
+		userID := c.Get(cfg.HeaderUserID)
 
 		// If no user ID is present, we assume it's an unauthenticated internal request
 		if userID == "" {
 			return c.Next()
 		}
 
-		// Parse roles from comma-separated string
-		var roles []string
-		if userRolesRaw != "" {
-			roles = strings.Split(userRolesRaw, ",")
-		}
-
-		// Parse permissions from comma-separated string
-		var permissions []string
-		if userPermissionsRaw != "" {
-			permissions = strings.Split(userPermissionsRaw, ",")
-		}
-
 		identity := &UserIdentity{
 			ID:          userID,
-			Email:       userEmail,
-			Roles:       roles,
-			Permissions: permissions,
+			Email:       c.Get(cfg.HeaderUserEmail),
+			Roles:       splitHeader(c.Get(cfg.HeaderUserRole), cfg.Separator),
+			Permissions: splitHeader(c.Get(cfg.HeaderUserPermissions), cfg.Separator),
 		}
 
 		// Store in Fiber Locals for easy access in handlers
@@ -60,6 +83,20 @@ func Identity() fiber.Handler {
 
 		return c.Next()
 	}
+}
+
+func splitHeader(raw, sep string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, sep)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // GetUserIdentity retrieves the user identity from the fiber context
@@ -76,22 +113,14 @@ func RequireRole(requiredRoles ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		identity := GetUserIdentity(c)
 		if identity == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"message": "unauthorized",
-			})
+			return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 		}
 
-		for _, requiredRole := range requiredRoles {
-			for _, role := range identity.Roles {
-				if role == requiredRole {
-					return c.Next()
-				}
-			}
+		if containsAny(identity.Roles, requiredRoles) {
+			return c.Next()
 		}
 
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"message": "forbidden: insufficient permissions (role)",
-		})
+		return response.Error(c, fiber.StatusForbidden, "forbidden: insufficient permissions (role)", nil)
 	}
 }
 
@@ -100,21 +129,24 @@ func RequirePermission(requiredPermissions ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		identity := GetUserIdentity(c)
 		if identity == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"message": "unauthorized",
-			})
+			return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 		}
 
-		for _, requiredPermission := range requiredPermissions {
-			for _, permission := range identity.Permissions {
-				if permission == requiredPermission {
-					return c.Next()
-				}
+		if containsAny(identity.Permissions, requiredPermissions) {
+			return c.Next()
+		}
+
+		return response.Error(c, fiber.StatusForbidden, "forbidden: insufficient permissions (permission)", nil)
+	}
+}
+
+func containsAny(have, want []string) bool {
+	for _, w := range want {
+		for _, h := range have {
+			if h == w {
+				return true
 			}
 		}
-
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"message": "forbidden: insufficient permissions (permission)",
-		})
 	}
+	return false
 }

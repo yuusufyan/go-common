@@ -8,6 +8,8 @@ import (
 	"github.com/yuusufyan/go-common/pkg/logger"
 )
 
+const HeaderTraceID = "X-Trace-ID"
+
 // Telemetry returns a middleware that manages Trace IDs and Request IDs
 func Telemetry() fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -19,11 +21,11 @@ func Telemetry() fiber.Handler {
 		c.Set(fiber.HeaderXRequestID, requestID)
 
 		// 2. Get or Generate Trace ID (for distributed tracing)
-		traceID := c.Get("X-Trace-ID")
+		traceID := c.Get(HeaderTraceID)
 		if traceID == "" {
 			traceID = uuid.New().String()
 		}
-		c.Set("X-Trace-ID", traceID)
+		c.Set(HeaderTraceID, traceID)
 
 		// 3. Store in Fiber locals for easy access in handlers
 		c.Locals("request_id", requestID)

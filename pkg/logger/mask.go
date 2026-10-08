@@ -22,7 +22,7 @@ func (h *MaskHook) Fire(entry *logrus.Entry) error {
 		if _, ok := entry.Data[key]; ok {
 			entry.Data[key] = "********"
 		}
-		// Also check case-insensitive or nested if needed, 
+		// Also check case-insensitive or nested if needed,
 		// but simple key match is a good start.
 		for k, v := range entry.Data {
 			if strings.EqualFold(k, key) {
@@ -35,9 +35,12 @@ func (h *MaskHook) Fire(entry *logrus.Entry) error {
 	return nil
 }
 
+// DefaultSensitiveKeys are the field names masked by NewMaskHook.
+var DefaultSensitiveKeys = []string{"password", "token", "secret", "refresh_token", "access_token", "authorization"}
+
 // NewMaskHook creates a new hook with default sensitive keys
 func NewMaskHook() *MaskHook {
 	return &MaskHook{
-		SensitiveKeys: []string{"password", "token", "secret", "refresh_token", "access_token", "authorization"},
+		SensitiveKeys: append([]string(nil), DefaultSensitiveKeys...),
 	}
 }

@@ -17,10 +17,7 @@ const (
 )
 
 func Connect(cfg *DBConfig, log logger.Logger, isProd bool) (*gorm.DB, error) {
-	dsn := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Asia/Jakarta",
-		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port,
-	)
+	dsn := BuildDSN(cfg)
 
 	gormConfig := &gorm.Config{
 		SkipDefaultTransaction: true,
@@ -29,7 +26,11 @@ func Connect(cfg *DBConfig, log logger.Logger, isProd bool) (*gorm.DB, error) {
 	}
 
 	if log != nil {
-		gormConfig.Logger = NewGormLogger(log)
+		gormLogger := NewGormLogger(log)
+		if cfg.SlowQueryThreshold > 0 {
+			gormLogger.SlowThreshold = cfg.SlowQueryThreshold
+		}
+		gormConfig.Logger = gormLogger
 	}
 
 	db, err := gorm.Open(postgres.Open(dsn), gormConfig)
@@ -60,9 +61,32 @@ func Connect(cfg *DBConfig, log logger.Logger, isProd bool) (*gorm.DB, error) {
 	sqlDB.SetMaxOpenConns(maxOpenConns)
 	sqlDB.SetConnMaxLifetime(time.Duration(connMaxLifetime) * time.Minute)
 
-	if err := db.Use(&AuditPlugin{}); err != nil {
-		return nil, fmt.Errorf("failed to register audit plugin: %w", err)
+	if !cfg.DisableAuditPlugin {
+		if err := db.Use(&AuditPlugin{}); err != nil {
+			return nil, fmt.Errorf("failed to register audit plugin: %w", err)
+		}
 	}
 
 	return db, nil
+}
+
+// BuildDSN builds a postgres DSN from cfg. cfg.DSN is returned as-is when set.
+func BuildDSN(cfg *DBConfig) string {
+	if cfg.DSN != "" {
+		return cfg.DSN
+	}
+
+	sslMode := cfg.SSLMode
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+
+	dsn := fmt.Sprintf(
+		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s",
+		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port, sslMode,
+	)
+	if cfg.TimeZone != "" {
+		dsn += " TimeZone=" + cfg.TimeZone
+	}
+	return dsn
 }

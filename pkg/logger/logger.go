@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"io"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -51,11 +52,31 @@ func WithCtx(ctx context.Context, log *logrus.Logger) *logrus.Entry {
 	return log.WithFields(fields)
 }
 
+// Config configures a logger created with NewWithConfig.
+type Config struct {
+	// JSON enables the JSON formatter (recommended for production / ELK / Loki).
+	JSON bool
+	// Level is the minimum log level ("debug", "info", "warn", "error", ...).
+	// Defaults to "info" when JSON is true, otherwise "debug".
+	Level string
+	// Output defaults to os.Stdout.
+	Output io.Writer
+	// Fields are attached to every log entry (e.g. {"service": "order-service"}).
+	Fields logrus.Fields
+	// SensitiveKeys are masked in log fields. Defaults to DefaultSensitiveKeys.
+	SensitiveKeys []string
+}
+
 // New initializes a new logrus logger with standardized formatting
 func New(isProd bool) Logger {
+	return NewWithConfig(Config{JSON: isProd})
+}
+
+// NewWithConfig initializes a new logger from cfg.
+func NewWithConfig(cfg Config) Logger {
 	log := logrus.New()
 
-	if isProd {
+	if cfg.JSON {
 		// In production, use JSON for centralized logging (ELK, Loki, etc.)
 		log.SetFormatter(&logrus.JSONFormatter{
 			TimestampFormat: "2006-01-02T15:04:05.999Z07:00",
@@ -69,15 +90,50 @@ func New(isProd bool) Logger {
 		})
 	}
 
-	log.SetOutput(os.Stdout)
-	log.AddHook(NewMaskHook())
-	
-	// Set default log level
-	if isProd {
-		log.SetLevel(logrus.InfoLevel)
-	} else {
-		log.SetLevel(logrus.DebugLevel)
+	if cfg.Output == nil {
+		cfg.Output = os.Stdout
+	}
+	log.SetOutput(cfg.Output)
+
+	if len(cfg.Fields) > 0 {
+		log.AddHook(&fieldsHook{fields: cfg.Fields})
 	}
 
+	maskHook := NewMaskHook()
+	if len(cfg.SensitiveKeys) > 0 {
+		maskHook.SensitiveKeys = cfg.SensitiveKeys
+	}
+	log.AddHook(maskHook)
+
+	// Set default log level
+	level := logrus.DebugLevel
+	if cfg.JSON {
+		level = logrus.InfoLevel
+	}
+	if cfg.Level != "" {
+		if lvl, err := logrus.ParseLevel(cfg.Level); err == nil {
+			level = lvl
+		}
+	}
+	log.SetLevel(level)
+
 	return &appLogger{Logger: log}
+}
+
+// fieldsHook attaches static fields to every entry without overriding per-entry fields.
+type fieldsHook struct {
+	fields logrus.Fields
+}
+
+func (h *fieldsHook) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
+
+func (h *fieldsHook) Fire(entry *logrus.Entry) error {
+	for k, v := range h.fields {
+		if _, ok := entry.Data[k]; !ok {
+			entry.Data[k] = v
+		}
+	}
+	return nil
 }

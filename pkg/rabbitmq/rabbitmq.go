@@ -16,20 +16,70 @@ type RabbitMQClient interface {
 	Close() error
 }
 
+// Config configures a RabbitMQ client. Zero values fall back to the defaults.
+type Config struct {
+	URL string
+	// Logger defaults to the logrus standard logger with field module=rabbitmq.
+	Logger logrus.FieldLogger
+	// ReconnectDelay between reconnect attempts (default: 5s).
+	ReconnectDelay time.Duration
+	// HandlerTimeout is the context timeout per consumed message (default: 5m).
+	HandlerTimeout time.Duration
+	// PrefetchCount is the consumer QoS prefetch (default: 1).
+	PrefetchCount int
+	// DLXSuffix and DLQSuffix name the dead-letter exchange/queue (default: ".dlx" / ".dlq").
+	DLXSuffix string
+	DLQSuffix string
+	// ContentType of published messages (default: "application/json").
+	ContentType string
+}
+
+func (c *Config) setDefaults() {
+	if c.Logger == nil {
+		c.Logger = logrus.WithField("module", "rabbitmq")
+	}
+	if c.ReconnectDelay <= 0 {
+		c.ReconnectDelay = 5 * time.Second
+	}
+	if c.HandlerTimeout <= 0 {
+		c.HandlerTimeout = 5 * time.Minute
+	}
+	if c.PrefetchCount <= 0 {
+		c.PrefetchCount = 1
+	}
+	if c.DLXSuffix == "" {
+		c.DLXSuffix = ".dlx"
+	}
+	if c.DLQSuffix == "" {
+		c.DLQSuffix = ".dlq"
+	}
+	if c.ContentType == "" {
+		c.ContentType = "application/json"
+	}
+}
+
 type rabbitMQClient struct {
+	cfg    Config
 	url    string
 	conn   *amqp.Connection
 	pubCh  *amqp.Channel
 	consCh *amqp.Channel
 	mu     sync.RWMutex
 	closed bool
-	log    *logrus.Entry
+	log    logrus.FieldLogger
 }
 
 func NewRabbitMQClient(url string) (RabbitMQClient, error) {
+	return NewRabbitMQClientWithConfig(Config{URL: url})
+}
+
+// NewRabbitMQClientWithConfig creates a client from cfg.
+func NewRabbitMQClientWithConfig(cfg Config) (RabbitMQClient, error) {
+	cfg.setDefaults()
 	client := &rabbitMQClient{
-		url: url,
-		log: logrus.WithField("module", "rabbitmq"),
+		cfg: cfg,
+		url: cfg.URL,
+		log: cfg.Logger,
 	}
 
 	if err := client.connect(); err != nil {
@@ -81,7 +131,7 @@ func (r *rabbitMQClient) connectLocked() error {
 		if amqpErr != nil && !isClosed {
 			r.log.Errorf("Connection closed: %v. Reconnecting...", amqpErr)
 			for {
-				time.Sleep(5 * time.Second)
+				time.Sleep(r.cfg.ReconnectDelay)
 				// Acquire lock before calling connectLocked to avoid deadlock
 				r.mu.Lock()
 				err := r.connectLocked()
@@ -117,7 +167,7 @@ func (r *rabbitMQClient) Publish(ctx context.Context, queueName string, body []b
 	return r.pubCh.PublishWithContext(ctx,
 		"", queueName, false, false,
 		amqp.Publishing{
-			ContentType:  "application/json",
+			ContentType:  r.cfg.ContentType,
 			DeliveryMode: amqp.Persistent,
 			Body:         body,
 		})
@@ -142,24 +192,24 @@ func (r *rabbitMQClient) Consume(queueName string, handler func(ctx context.Cont
 			}
 
 			// Setup DLQ and Main Queue
-			dlxName := queueName + ".dlx"
-			dlqName := queueName + ".dlq"
-			
+			dlxName := queueName + r.cfg.DLXSuffix
+			dlqName := queueName + r.cfg.DLQSuffix
+
 			if err := currConsCh.ExchangeDeclare(dlxName, "direct", true, false, false, false, nil); err != nil {
 				r.log.Errorf("Failed to declare DLX '%s': %v", dlxName, err)
-				time.Sleep(5 * time.Second)
+				time.Sleep(r.cfg.ReconnectDelay)
 				continue
 			}
-			
+
 			if _, err := currConsCh.QueueDeclare(dlqName, true, false, false, false, nil); err != nil {
 				r.log.Errorf("Failed to declare DLQ '%s': %v", dlqName, err)
-				time.Sleep(5 * time.Second)
+				time.Sleep(r.cfg.ReconnectDelay)
 				continue
 			}
-			
+
 			if err := currConsCh.QueueBind(dlqName, dlqName, dlxName, false, nil); err != nil {
 				r.log.Errorf("Failed to bind DLQ '%s': %v", dlqName, err)
-				time.Sleep(5 * time.Second)
+				time.Sleep(r.cfg.ReconnectDelay)
 				continue
 			}
 
@@ -167,15 +217,19 @@ func (r *rabbitMQClient) Consume(queueName string, handler func(ctx context.Cont
 			q, err := currConsCh.QueueDeclare(queueName, true, false, false, false, args)
 			if err != nil {
 				r.log.Errorf("Failed to declare queue '%s': %v", queueName, err)
-				time.Sleep(5 * time.Second)
+				time.Sleep(r.cfg.ReconnectDelay)
 				continue
 			}
 
-			currConsCh.Qos(1, 0, false)
+			if err := currConsCh.Qos(r.cfg.PrefetchCount, 0, false); err != nil {
+				r.log.Errorf("Failed to set QoS for '%s': %v", queueName, err)
+				time.Sleep(r.cfg.ReconnectDelay)
+				continue
+			}
 			msgs, err := currConsCh.Consume(q.Name, "", false, false, false, false, nil)
 			if err != nil {
 				r.log.Errorf("Failed to start consuming '%s': %v", queueName, err)
-				time.Sleep(5 * time.Second)
+				time.Sleep(r.cfg.ReconnectDelay)
 				continue
 			}
 
@@ -184,7 +238,7 @@ func (r *rabbitMQClient) Consume(queueName string, handler func(ctx context.Cont
 			for d := range msgs {
 				func() {
 					// Add Timeout to prevent hanging workers
-					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+					ctx, cancel := context.WithTimeout(context.Background(), r.cfg.HandlerTimeout)
 					defer cancel()
 
 					defer func() {
@@ -214,7 +268,7 @@ func (r *rabbitMQClient) Consume(queueName string, handler func(ctx context.Cont
 func (r *rabbitMQClient) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	r.closed = true
 	if r.consCh != nil {
 		r.consCh.Close()

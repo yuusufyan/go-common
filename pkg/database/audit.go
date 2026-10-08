@@ -106,6 +106,6 @@ func getUserID(ctx context.Context) string {
 	if u, ok := userVal.(interface{ GetID() string }); ok {
 		return u.GetID()
 	}
-	
+
 	return ""
 }
