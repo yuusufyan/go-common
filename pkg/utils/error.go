@@ -21,7 +21,7 @@ func NewErrorHandler(log logrus.FieldLogger) fiber.ErrorHandler {
 		var appErr *apperror.AppError
 		if errors.As(err, &appErr) {
 			if appErr.Code >= 500 {
-				logger.WithCtx(c.UserContext(), log).WithError(err).Error("App Error")
+				entry.WithError(err).Error("App Error")
 			}
 			return response.Error(c, appErr.Code, appErr.Message, appErr.Errors)
 		}
@@ -29,13 +29,13 @@ func NewErrorHandler(log logrus.FieldLogger) fiber.ErrorHandler {
 		var fiberErr *fiber.Error
 		if errors.As(err, &fiberErr) {
 			if fiberErr.Code >= 500 {
-				logger.WithCtx(c.UserContext(), log).WithError(err).Error("Fiber Error")
+				entry.WithError(err).Error("Fiber Error")
 			}
 			return response.Error(c, fiberErr.Code, fiberErr.Message, nil)
 		}
 
 		// Log unhandled errors
-		logger.WithCtx(c.UserContext(), log).WithError(err).Error("Unhandled Error")
+		entry.WithError(err).Error("Unhandled Error")
 		return response.Error(c, fiber.StatusInternalServerError, "Internal Server Error", nil)
 	}
 }
