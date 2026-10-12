@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -75,12 +75,12 @@ func NewHealthHandlerWithConfig(cfg HealthConfig) fiber.Handler {
 		cfg.Timeout = 2 * time.Second
 	}
 
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		status := "UP"
 		checks := make(map[string]string, len(cfg.Checks))
 
 		for _, hc := range cfg.Checks {
-			ctx, cancel := context.WithTimeout(c.UserContext(), cfg.Timeout)
+			ctx, cancel := context.WithTimeout(c.Context(), cfg.Timeout)
 			err := hc.Check(ctx)
 			cancel()
 

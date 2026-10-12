@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/yuusufyan/go-common/pkg/apperror"
 )
 
@@ -52,7 +52,7 @@ type Pagination struct {
 }
 
 // JSON is the standard way to send any generic response in Fiber
-func JSON[T any](c *fiber.Ctx, code int, message string, data T) error {
+func JSON[T any](c fiber.Ctx, code int, message string, data T) error {
 	status := "success"
 	if code >= 400 {
 		status = "error"
@@ -67,17 +67,17 @@ func JSON[T any](c *fiber.Ctx, code int, message string, data T) error {
 }
 
 // Success is a convenience wrapper for successful JSON responses
-func Success(c *fiber.Ctx, code int, message string, data interface{}) error {
+func Success(c fiber.Ctx, code int, message string, data interface{}) error {
 	return JSON(c, code, message, data)
 }
 
 // Error is a convenience wrapper for error JSON responses
-func Error(c *fiber.Ctx, code int, message string, data interface{}) error {
+func Error(c fiber.Ctx, code int, message string, data interface{}) error {
 	return JSON(c, code, message, data)
 }
 
 // RespondWithError is a helper to respond using an error object for Fiber
-func RespondWithError(c *fiber.Ctx, err error) error {
+func RespondWithError(c fiber.Ctx, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -103,7 +103,7 @@ func RespondWithError(c *fiber.Ctx, err error) error {
 }
 
 // Paginate is the standard way to send paginated responses in Fiber
-func Paginate[T any](c *fiber.Ctx, message string, data []T, total int64, page, limit int) error {
+func Paginate[T any](c fiber.Ctx, message string, data []T, total int64, page, limit int) error {
 	totalPages := 0
 	if limit > 0 {
 		totalPages = int(math.Ceil(float64(total) / float64(limit)))
@@ -127,7 +127,7 @@ func Paginate[T any](c *fiber.Ctx, message string, data []T, total int64, page, 
 }
 
 // RespondWithPagination is a helper that takes a flat Pagination object and sends a standardized nested response
-func RespondWithPagination(c *fiber.Ctx, message string, p *Pagination) error {
+func RespondWithPagination(c fiber.Ctx, message string, p *Pagination) error {
 	if p == nil {
 		return c.Status(fiber.StatusOK).JSON(Response[[]interface{}]{
 			Code:    fiber.StatusOK,

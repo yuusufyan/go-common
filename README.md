@@ -23,8 +23,8 @@ Library ini **tidak terikat ke project tertentu**: setiap komponen punya default
 ---
 
 ## 🏗 Prasyarat
-*   **Go Version**: 1.25 atau lebih baru.
-*   **Dependencies utama**: Fiber v2, GORM (Postgres), amqp091-go, go-redis v9, Logrus.
+*   **Go Version**: 1.26 atau lebih baru.
+*   **Dependencies utama**: Fiber v3, GORM (Postgres), amqp091-go, go-redis v9, Logrus.
 
 ---
 
@@ -145,11 +145,60 @@ type Product struct {
 }
 ```
 
-`AuditPlugin` otomatis didaftarkan oleh `database.Connect` (nonaktifkan dengan `DisableAuditPlugin: true`). Plugin mengisi `CreatedBy`/`UpdatedBy` dari user di context:
+`AuditPlugin` otomatis didaftarkan oleh `database.Connect` (nonaktifkan dengan `DisableAuditPlugin: true`). Plugin mengisi `CreatedBy`/`UpdatedBy` dari user di context. Middleware `mw.Identity()` sudah otomatis menaruh user ke `c.Context()`, jadi cukup teruskan `c.Context()` ke service/repository. Di luar HTTP (worker, consumer), isi manual:
 ```go
 ctx = context.WithValue(ctx, database.UserContextKey, user)
 // user: struct dengan field ID/UserID (string/uuid) atau implementasi GetID() string
 ```
+
+### Tabel `audit_trails` (`/pkg/audit`)
+
+Tabel `audit_trails` dibuat di database **masing-masing project**. go-common hanya menyediakan model, recorder, dan middleware untuk mengisinya. Setiap entri disimpan ke tabel sekaligus ditulis ke structured log.
+
+| `type` | Sumber | Isi |
+| :--- | :--- | :--- |
+| `http` | Middleware `mw.AuditTrail` | Request `POST/PUT/PATCH/DELETE`: route, path, status, latency, IP, user agent |
+| `data` | Manual dari project (`rec.Record`) | Perubahan data yang ingin dicatat, misal `old_values` / `new_values` |
+
+Semua entri membawa `user_id`, `user_email`, `request_id`, `trace_id` (diambil otomatis dari context). Nilai dengan key sensitif (`password*`, `*token*`, `secret`, dll.) di-mask.
+
+```go
+import "github.com/yuusufyan/go-common/pkg/audit"
+
+// 1. Buat tabel di DB project (sekali, atau lewat migration project)
+if err := audit.Migrate(db); err != nil { ... }
+
+// 2. Recorder async: Record() tidak memblokir request, worker menyimpan per batch
+rec := audit.NewRecorder(audit.Config{
+    Store:  audit.NewGormStore(db), // nil = hanya log
+    Logger: log,                    // nil = tidak ditulis ke log
+    // BufferSize: 1000, BatchSize: 100, FlushInterval: time.Second
+})
+
+// 3. Aktivitas HTTP: pasang setelah Telemetry & Identity
+app.Use(mw.Identity())
+app.Use(mw.AuditTrail(rec, mw.AuditTrailConfig{
+    Next: func(c fiber.Ctx) bool { return c.Path() == "/health" },
+}))
+
+// (opsional) Catat perubahan data secara manual dari service
+rec.Record(ctx, &audit.Trail{
+    Type:      audit.TypeData,
+    Action:    audit.ActionUpdate,
+    Entity:    "products",
+    EntityID:  product.ID,
+    OldValues: audit.JSONMap{"price": oldPrice},
+    NewValues: audit.JSONMap{"price": product.Price},
+})
+
+// 4. Flush sisa antrian saat shutdown (setelah HTTP berhenti)
+sh.Graceful(map[string]func(ctx context.Context) error{
+    "HTTP":  func(ctx context.Context) error { return app.ShutdownWithContext(ctx) },
+    "Audit": rec.Close,
+})
+```
+
+Catatan: saat antrian penuh, entri di-drop dan muncul warning `Audit trail queue full`. Entri yang belum tersimpan juga hilang kalau proses crash.
 
 ---
 
@@ -171,6 +220,8 @@ log := logger.NewWithConfig(logger.Config{
 log.WithCtx(ctx).Info("Processing data...")
 ```
 
+> **Monitoring**: library ini belum menyertakan integrasi Grafana/Loki/Prometheus. Dengan `JSON: true`, log sudah siap di-ship ke Loki (mis. via Promtail/Alloy) dan di-query di Grafana berdasarkan field `request_id`, `trace_id`, `user_id`, atau `audit_type`.
+
 ---
 
 ## 6. Middleware (`/pkg/middleware`)
@@ -181,13 +232,13 @@ import mw "github.com/yuusufyan/go-common/pkg/middleware/fiber"
 
 app := fiber.New(fiber.Config{ErrorHandler: utils.NewErrorHandler(log)})
 
-// Default: Telemetry, Helmet, CORS (AllowOrigins "*"), Recover, Logger
+// Default: Telemetry, Helmet, CORS (AllowOrigins ["*"]), Recover, Logger
 mw.InstallCommonMiddleware(app, log)
 
 // Atau dengan konfigurasi
 mw.InstallCommonMiddlewareWithConfig(app, log, mw.CommonConfig{
     Security: mw.SecurityConfig{
-        AllowOrigins:     "https://app.example.com",
+        AllowOrigins:     []string{"https://app.example.com"},
         AllowCredentials: true,
     },
     DisableSecurity: false, // true jika CORS/helmet ditangani API gateway
@@ -224,7 +275,7 @@ app.Use(mw.InternalSecretWithConfig(mw.InternalSecretConfig{
     EnvKey:  "ORDER_SERVICE_SECRET",          // atau isi Secret langsung
     Header:  "X-Internal-Secret",
     Message: "Forbidden",
-    Next:    func(c *fiber.Ctx) bool { return c.Path() == "/health" },
+    Next:    func(c fiber.Ctx) bool { return c.Path() == "/health" },
 }))
 ```
 Jika secret kosong, semua request ditolak (fail-closed).
@@ -233,7 +284,7 @@ Jika secret kosong, semua request ditolak (fail-closed).
 ```go
 swagger.SetupSwagger(app)                              // GET /swagger/*
 swagger.SetupSwaggerWithConfig(app, "/docs/*")         // path kustom
-swagger.SetupSwaggerWithConfig(app, "/docs/*", fiberSwagger.Config{Title: "Order API"})
+swagger.SetupSwaggerWithConfig(app, "/docs/*", swaggo.Config{Title: "Order API"}) // github.com/gofiber/contrib/v3/swaggo
 ```
 
 ---

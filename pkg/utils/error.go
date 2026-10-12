@@ -9,14 +9,14 @@ import (
 	"github.com/yuusufyan/go-common/pkg/logger"
 	"github.com/yuusufyan/go-common/response"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // NewErrorHandler returns a Fiber error handler that maps AppError / fiber.Error to the
 // standard response envelope. log accepts either a logger.Logger or a *logrus.Logger.
 func NewErrorHandler(log logrus.FieldLogger) fiber.ErrorHandler {
-	return func(c *fiber.Ctx, err error) error {
-		entry := ctxEntry(c.UserContext(), log)
+	return func(c fiber.Ctx, err error) error {
+		entry := ctxEntry(c.Context(), log)
 
 		var appErr *apperror.AppError
 		if errors.As(err, &appErr) {
@@ -52,6 +52,6 @@ func ctxEntry(ctx context.Context, log logrus.FieldLogger) logrus.FieldLogger {
 	}
 }
 
-func NotFoundHandler(c *fiber.Ctx) error {
+func NotFoundHandler(c fiber.Ctx) error {
 	return response.Error(c, fiber.StatusNotFound, "Endpoint Not Found", nil)
 }

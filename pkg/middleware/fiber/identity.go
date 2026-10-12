@@ -1,9 +1,11 @@
 package fiber
 
 import (
+	"context"
 	"strings"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
+	"github.com/yuusufyan/go-common/pkg/database"
 	"github.com/yuusufyan/go-common/response"
 )
 
@@ -27,6 +29,11 @@ type UserIdentity struct {
 // GetID implements the interface used by the database audit plugin.
 func (u *UserIdentity) GetID() string {
 	return u.ID
+}
+
+// GetEmail is used by audit trails to record the user email.
+func (u *UserIdentity) GetEmail() string {
+	return u.Email
 }
 
 // IdentityConfig configures the header names used by the Identity middleware.
@@ -63,7 +70,7 @@ func IdentityWithConfig(cfg IdentityConfig) fiber.Handler {
 		cfg.Separator = ","
 	}
 
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		userID := c.Get(cfg.HeaderUserID)
 
 		// If no user ID is present, we assume it's an unauthenticated internal request
@@ -80,6 +87,10 @@ func IdentityWithConfig(cfg IdentityConfig) fiber.Handler {
 
 		// Store in Fiber Locals for easy access in handlers
 		c.Locals(UserIdentityKey, identity)
+
+		// Also store in the request context so database.AuditPlugin (created_by/updated_by)
+		// and audit trails pick up the user from ctx.
+		c.SetContext(context.WithValue(c.Context(), database.UserContextKey, identity))
 
 		return c.Next()
 	}
@@ -100,7 +111,7 @@ func splitHeader(raw, sep string) []string {
 }
 
 // GetUserIdentity retrieves the user identity from the fiber context
-func GetUserIdentity(c *fiber.Ctx) *UserIdentity {
+func GetUserIdentity(c fiber.Ctx) *UserIdentity {
 	identity, ok := c.Locals(UserIdentityKey).(*UserIdentity)
 	if !ok {
 		return nil
@@ -110,7 +121,7 @@ func GetUserIdentity(c *fiber.Ctx) *UserIdentity {
 
 // RequireRole is a helper middleware to check if the user has any of the specific roles
 func RequireRole(requiredRoles ...string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		identity := GetUserIdentity(c)
 		if identity == nil {
 			return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
@@ -126,7 +137,7 @@ func RequireRole(requiredRoles ...string) fiber.Handler {
 
 // RequirePermission is a helper middleware to check if the user has any of the specific permissions
 func RequirePermission(requiredPermissions ...string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		identity := GetUserIdentity(c)
 		if identity == nil {
 			return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)

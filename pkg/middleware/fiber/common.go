@@ -1,7 +1,7 @@
 package fiber
 
 import (
-	gofiber "github.com/gofiber/fiber/v2"
+	gofiber "github.com/gofiber/fiber/v3"
 	"github.com/yuusufyan/go-common/pkg/logger"
 )
 

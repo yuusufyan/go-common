@@ -3,7 +3,7 @@ package fiber
 import (
 	"context"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/yuusufyan/go-common/pkg/logger"
 )
@@ -12,7 +12,7 @@ const HeaderTraceID = "X-Trace-ID"
 
 // Telemetry returns a middleware that manages Trace IDs and Request IDs
 func Telemetry() fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		// 1. Get or Generate Request ID
 		requestID := c.Get(fiber.HeaderXRequestID)
 		if requestID == "" {
@@ -34,10 +34,10 @@ func Telemetry() fiber.Handler {
 		// 4. Create a context with these IDs and pass it down
 		// Note: When you can add go.opentelemetry.io/otel, replace this with
 		// actual OTel trace propagation.
-		ctx := c.UserContext()
+		ctx := c.Context()
 		ctx = context.WithValue(ctx, logger.RequestIDKey, requestID)
 		ctx = context.WithValue(ctx, logger.TraceIDKey, traceID)
-		c.SetUserContext(ctx)
+		c.SetContext(ctx)
 
 		return c.Next()
 	}

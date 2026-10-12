@@ -68,6 +68,12 @@ func (p *AuditPlugin) beforeUpdate(db *gorm.DB) {
 	}
 }
 
+// UserIDFromContext returns the ID of the user stored under UserContextKey, or "".
+// The user may be a struct with an ID/UserID field (string or uuid) or implement GetID() string.
+func UserIDFromContext(ctx context.Context) string {
+	return getUserID(ctx)
+}
+
 func getUserID(ctx context.Context) string {
 	if ctx == nil {
 		return ""

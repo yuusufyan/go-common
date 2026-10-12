@@ -3,14 +3,14 @@ package fiber
 import (
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/yuusufyan/go-common/pkg/logger"
 )
 
 // Logger returns a middleware that logs HTTP requests using the structured logger
 func Logger(log logger.Logger) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		start := time.Now()
 
 		// Process request
@@ -20,7 +20,7 @@ func Logger(log logger.Logger) fiber.Handler {
 		latency := time.Since(start)
 
 		// Get Trace ID and Request ID from context (set by Telemetry middleware)
-		entry := log.WithCtx(c.UserContext()).WithFields(logrus.Fields{
+		entry := log.WithCtx(c.Context()).WithFields(logrus.Fields{
 			"method":     c.Method(),
 			"path":       c.Path(),
 			"status":     c.Response().StatusCode(),

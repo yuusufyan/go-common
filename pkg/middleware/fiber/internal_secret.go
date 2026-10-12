@@ -4,7 +4,7 @@ import (
 	"crypto/subtle"
 	"os"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/yuusufyan/go-common/response"
 )
 
@@ -28,7 +28,7 @@ type InternalSecretConfig struct {
 	// Message is returned with 403 when the secret is missing or invalid.
 	Message string
 	// Next skips the middleware when it returns true (e.g. for /health).
-	Next func(c *fiber.Ctx) bool
+	Next func(c fiber.Ctx) bool
 }
 
 // InternalSecretFromEnv reads the expected secret from the INTERNAL_SERVICE_SECRET env variable.
@@ -69,7 +69,7 @@ func InternalSecretWithConfig(cfg InternalSecretConfig) fiber.Handler {
 	}
 	expected := []byte(cfg.Secret)
 
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		if cfg.Next != nil && cfg.Next(c) {
 			return c.Next()
 		}

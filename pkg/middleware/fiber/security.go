@@ -1,25 +1,25 @@
 package fiber
 
 import (
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/helmet"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/gofiber/fiber/v3/middleware/helmet"
 )
 
-const (
-	defaultAllowHeaders = "Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Trace-ID"
-	defaultAllowMethods = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+var (
+	defaultAllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-Trace-ID"}
+	defaultAllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
 )
 
 // SecurityConfig configures the helmet headers and CORS policy.
 // Empty fields fall back to the defaults.
 type SecurityConfig struct {
-	// AllowOrigins is a comma-separated list of origins (default: "*").
+	// AllowOrigins is the list of allowed origins (default: ["*"]).
 	// Restrict this in production.
-	AllowOrigins     string
-	AllowHeaders     string
-	AllowMethods     string
-	ExposeHeaders    string
+	AllowOrigins     []string
+	AllowHeaders     []string
+	AllowMethods     []string
+	ExposeHeaders    []string
 	AllowCredentials bool
 	// MaxAge in seconds for preflight cache.
 	MaxAge int
@@ -46,13 +46,13 @@ func Helmet(cfg SecurityConfig) fiber.Handler {
 
 // CORS returns the CORS middleware built from cfg.
 func CORS(cfg SecurityConfig) fiber.Handler {
-	if cfg.AllowOrigins == "" {
-		cfg.AllowOrigins = "*"
+	if len(cfg.AllowOrigins) == 0 {
+		cfg.AllowOrigins = []string{"*"}
 	}
-	if cfg.AllowHeaders == "" {
+	if len(cfg.AllowHeaders) == 0 {
 		cfg.AllowHeaders = defaultAllowHeaders
 	}
-	if cfg.AllowMethods == "" {
+	if len(cfg.AllowMethods) == 0 {
 		cfg.AllowMethods = defaultAllowMethods
 	}
 

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	gofiber "github.com/gofiber/fiber/v2"
+	gofiber "github.com/gofiber/fiber/v3"
 	"github.com/yuusufyan/go-common/pkg/logger"
 )
 
@@ -14,7 +14,7 @@ func TestCommonMiddlewareRunsHandlerOnce(t *testing.T) {
 	InstallCommonMiddleware(app, logger.NewWithConfig(logger.Config{Output: io.Discard}))
 
 	calls := 0
-	app.Get("/ping", func(c *gofiber.Ctx) error {
+	app.Get("/ping", func(c gofiber.Ctx) error {
 		calls++
 		return c.SendString("pong")
 	})
@@ -33,8 +33,8 @@ func TestCommonMiddlewareRunsHandlerOnce(t *testing.T) {
 
 func TestCORSAllowOrigins(t *testing.T) {
 	app := gofiber.New()
-	UseSecurity(app, SecurityConfig{AllowOrigins: "https://app.example.com"})
-	app.Get("/", func(c *gofiber.Ctx) error { return c.SendStatus(200) })
+	UseSecurity(app, SecurityConfig{AllowOrigins: []string{"https://app.example.com"}})
+	app.Get("/", func(c gofiber.Ctx) error { return c.SendStatus(200) })
 
 	req := httptest.NewRequest("GET", "/", nil)
 	req.Header.Set("Origin", "https://app.example.com")
@@ -47,7 +47,7 @@ func TestCORSAllowOrigins(t *testing.T) {
 func TestInternalSecretWithConfig(t *testing.T) {
 	app := gofiber.New()
 	app.Use(InternalSecretWithConfig(InternalSecretConfig{Secret: "s3cret", Header: "X-Key"}))
-	app.Get("/", func(c *gofiber.Ctx) error { return c.SendStatus(200) })
+	app.Get("/", func(c gofiber.Ctx) error { return c.SendStatus(200) })
 
 	cases := map[string]int{"": 403, "wrong": 403, "s3cret": 200}
 	for val, want := range cases {
@@ -66,7 +66,7 @@ func TestInternalSecretEmptyRejectsAll(t *testing.T) {
 	t.Setenv(DefaultInternalSecretEnv, "")
 	app := gofiber.New()
 	app.Use(InternalSecret(""))
-	app.Get("/", func(c *gofiber.Ctx) error { return c.SendStatus(200) })
+	app.Get("/", func(c gofiber.Ctx) error { return c.SendStatus(200) })
 
 	req := httptest.NewRequest("GET", "/", nil)
 	req.Header.Set(HeaderInternalSecret, "anything")
@@ -79,7 +79,7 @@ func TestInternalSecretEmptyRejectsAll(t *testing.T) {
 func TestIdentityWithConfigAndRequireRole(t *testing.T) {
 	app := gofiber.New()
 	app.Use(IdentityWithConfig(IdentityConfig{HeaderUserID: "X-Uid", HeaderUserRole: "X-Roles"}))
-	app.Get("/admin", RequireRole("admin"), func(c *gofiber.Ctx) error { return c.SendStatus(200) })
+	app.Get("/admin", RequireRole("admin"), func(c gofiber.Ctx) error { return c.SendStatus(200) })
 
 	req := httptest.NewRequest("GET", "/admin", nil)
 	req.Header.Set("X-Uid", "u1")

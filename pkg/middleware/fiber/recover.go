@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/yuusufyan/go-common/pkg/logger"
 	"github.com/yuusufyan/go-common/response"
@@ -12,7 +12,7 @@ import (
 
 // Recover returns a middleware that recovers from panics and logs them using logrus
 func Recover(log logger.Logger) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		defer func() {
 			if r := recover(); r != nil {
 				err, ok := r.(error)
@@ -22,7 +22,7 @@ func Recover(log logger.Logger) fiber.Handler {
 
 				stack := debug.Stack()
 
-				log.WithCtx(c.UserContext()).WithFields(logrus.Fields{
+				log.WithCtx(c.Context()).WithFields(logrus.Fields{
 					"stack":  string(stack),
 					"method": c.Method(),
 					"path":   c.Path(),

@@ -1,8 +1,8 @@
 package swagger
 
 import (
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/swagger"
+	"github.com/gofiber/fiber/v3"
+	swagger "github.com/gofiber/contrib/v3/swaggo"
 )
 
 // DefaultPath is the route registered by SetupSwagger.
